@@ -191,7 +191,7 @@ function isTypingIndicatorPayload(body) {
   ) {
     return true;
   }
-  
+
   // Keep the structured checks just in case
   const json = tryJSON(body);
   if (json) {
@@ -234,7 +234,7 @@ function shouldBlockReadReceipt(url, body) {
   for (const pattern of READ_RECEIPT_URL_PATTERNS) {
     if (pattern.test(url)) return true;
   }
-  
+
   // Check body for GraphQL mutations related to read status
   if (body) {
     const lower = body.toLowerCase();
@@ -245,7 +245,7 @@ function shouldBlockReadReceipt(url, body) {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -254,13 +254,13 @@ function shouldBlockTyping(url, body) {
   for (const pattern of TYPING_URL_PATTERNS) {
     if (pattern.test(url)) return true;
   }
-  
+
   // Also check body for typing-related data
   if (body) {
     // Check if payload contains typing indicators
     if (isTypingIndicatorPayload(body)) return true;
   }
-  
+
   return false;
 }
 
@@ -268,7 +268,7 @@ function updateRequestBlocker() {
   const blockReadReceipts = store.get("blockReadReceipts");
   const blockTypingIndicator = store.get("blockTypingIndicator");
   const expTypingOverlay = store.get("expTypingOverlay");
-  
+
   const filter = {
     urls: [
       "https://*.messenger.com/*",
@@ -287,7 +287,7 @@ function updateRequestBlocker() {
   if (requestBlockerHandler) {
     try {
       session.defaultSession.webRequest.onBeforeRequest(filter, null);
-    } catch (_) {}
+    } catch (_) { }
     requestBlockerHandler = null;
   }
 
@@ -296,38 +296,38 @@ function updateRequestBlocker() {
     requestBlockerHandler = (details, callback) => {
       const url = details.url || "";
       const body = details.method === "POST" ? getRequestBody(details) : "";
-      
+
       // Silently block local probes from Facebook scripts
       if (url.includes("localhost:3103")) {
-         return callback({ cancel: true });
+        return callback({ cancel: true });
       }
-      
+
       // Check read receipts blocking
       if (blockReadReceipts && shouldBlockReadReceipt(url, body)) {
         console.log(`\x1b[31m[Unleashed] [BLOCKED] READ RECEIPT:\x1b[0m ${url.slice(0, 150)}`);
         return callback({ cancel: true });
       }
-      
+
       // Check typing indicator blocking (skip WebSockets; handled in preload)
       if (blockTypingIndicator && details.resourceType !== "websocket" && shouldBlockTyping(url, body)) {
         console.log(`\x1b[33m[Unleashed] [BLOCKED] TYPING INDICATOR:\x1b[0m ${url.slice(0, 150)}`);
         return callback({ cancel: true });
       }
-      
+
       // DEBUG: Log any active traffic to see what we missed
       if (!url.includes("blocked_") && !url.includes("ping")) {
-         if (url.includes("graphql")) {
-            // console.log(`\x1b[36m[Unleashed] [GraphQL] ${url} | Body len: ${body.length}\x1b[0m`);
-            if (body.includes("typing")) console.log(`\x1b[35m[Unleashed] [MISSED TYPING] In GraphQL: ${url}\x1b[0m`);
-         }
-         else if (url.includes("bnzai") || url.includes("typing")) {
-            // console.log(`\x1b[90m[Unleashed] [Banzai/Typing] ${url.slice(0, 100)}\x1b[0m`);
-         }
+        if (url.includes("graphql")) {
+          // console.log(`\x1b[36m[Unleashed] [GraphQL] ${url} | Body len: ${body.length}\x1b[0m`);
+          if (body.includes("typing")) console.log(`\x1b[35m[Unleashed] [MISSED TYPING] In GraphQL: ${url}\x1b[0m`);
+        }
+        else if (url.includes("bnzai") || url.includes("typing")) {
+          // console.log(`\x1b[90m[Unleashed] [Banzai/Typing] ${url.slice(0, 100)}\x1b[0m`);
+        }
       }
 
       return callback({});
     };
-    
+
     console.log(`\x1b[35m[Unleashed] [BLOCKER] Active | Read: ${blockReadReceipts} | Typing: ${blockTypingIndicator}\x1b[0m`);
     session.defaultSession.webRequest.onBeforeRequest(filter, requestBlockerHandler);
   }
@@ -341,7 +341,7 @@ function installLocalProbeBlocker() {
       { urls: ["http://localhost:3103/*"] },
       (_, callback) => callback({ cancel: true })
     );
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function getAllFramesForWebContents(contents) {
@@ -487,7 +487,7 @@ function syncWebSocketProxyFlags() {
 
   for (const frame of getAllFramesForWebContents(mainWindow.webContents)) {
     if (!frame || frame.detached) continue;
-    frame.executeJavaScript(script, true).catch(() => {});
+    frame.executeJavaScript(script, true).catch(() => { });
   }
 }
 
@@ -496,7 +496,7 @@ function ensureWebSocketProxyInstalled() {
   const installScript = buildWebSocketProxyInstallScript();
   for (const frame of getAllFramesForWebContents(mainWindow.webContents)) {
     if (!frame || frame.detached) continue;
-    frame.executeJavaScript(installScript, true).catch(() => {});
+    frame.executeJavaScript(installScript, true).catch(() => { });
   }
   syncWebSocketProxyFlags();
 }
@@ -518,8 +518,8 @@ function getIconPath() {
     process.platform === "win32"
       ? "icon.ico"
       : process.platform === "darwin"
-      ? "icon.icns"
-      : "icon.png";
+        ? "icon.icns"
+        : "icon.png";
   const iconPath = path.join(app.getAppPath(), iconName);
   if (fs.existsSync(iconPath)) return iconPath;
   // fallback to any available icon
@@ -843,8 +843,8 @@ function sendQuickReply(text) {
 
       // dispatch input event to trigger React state update
       input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: ${JSON.stringify(
-        text
-      )} }));
+    text
+  )} }));
 
       // simulate Enter key
       const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true });
@@ -1050,7 +1050,7 @@ function focusSearch() {
     })()
   `
     )
-    .catch(() => {});
+    .catch(() => { });
 }
 
 function setScheduleDelay(delayMs) {
@@ -1360,9 +1360,9 @@ function applyFontSize() {
       font-size: ${size <= 100 ? '1em' : `${size / 100}em`} !important;
     }
   `;
-  mainWindow.webContents.removeInsertedCSS("font-size").catch(() => {});
+  mainWindow.webContents.removeInsertedCSS("font-size").catch(() => { });
   if (size !== 100) {
-    mainWindow.webContents.insertCSS(css, { cssKey: "font-size" } as any).catch(() => {});
+    mainWindow.webContents.insertCSS(css, { cssKey: "font-size" } as any).catch(() => { });
   }
 }
 
@@ -1479,10 +1479,9 @@ function navigateConversation(direction) {
         currentIdx = ${direction === "up" ? "rows.length" : "-1"};
       }
 
-      const nextIdx = ${
-        direction === "up"
-          ? "Math.max(0, currentIdx - 1)"
-          : "Math.min(rows.length - 1, currentIdx + 1)"
+      const nextIdx = ${direction === "up"
+        ? "Math.max(0, currentIdx - 1)"
+        : "Math.min(rows.length - 1, currentIdx + 1)"
       };
       const target = rows[nextIdx];
       if (target) {
@@ -1492,7 +1491,7 @@ function navigateConversation(direction) {
     })()
   `
     )
-    .catch(() => {});
+    .catch(() => { });
 }
 
 // use IPC dialog instead of prompt() for CSS editing
@@ -1506,9 +1505,8 @@ async function editCustomCSS() {
     title: "Custom CSS",
     message: "Edit custom CSS styling?",
     detail: existing
-      ? `Current CSS:\n${existing.slice(0, 200)}${
-          existing.length > 200 ? "..." : ""
-        }`
+      ? `Current CSS:\n${existing.slice(0, 200)}${existing.length > 200 ? "..." : ""
+      }`
       : "No custom CSS set.",
     buttons: ["Cancel", "Edit", "Clear"],
     defaultId: 1,
@@ -1542,7 +1540,7 @@ async function editCustomCSS() {
 function applyModernLook() {
   if (!mainWindow) return;
   const enabled = store.get("modernLook");
-  mainWindow.webContents.removeInsertedCSS("modern-look").catch(() => {});
+  mainWindow.webContents.removeInsertedCSS("modern-look").catch(() => { });
 
   if (enabled) {
     // Premium modern look with glassmorphism floating panels
@@ -1749,7 +1747,7 @@ function applyModernLook() {
     `;
     mainWindow.webContents
       .insertCSS(modernCSS, { cssKey: "modern-look" } as any)
-      .catch(() => {});
+      .catch(() => { });
   } else {
     // If we're not also in glass mode, restore the current theme colors
     if (!store.get("floatingGlass")) {
@@ -1778,13 +1776,13 @@ function applyUICleanup() {
       display: none !important;
     }
   `;
-  mainWindow.webContents.insertCSS(cleanupCSS, { cssKey: "ui-cleanup" } as any).catch(() => {});
+  mainWindow.webContents.insertCSS(cleanupCSS, { cssKey: "ui-cleanup" } as any).catch(() => { });
 }
 
 function toggleModernLook() {
   const current = store.get("modernLook");
   const newValue = !current;
-  
+
   if (newValue) {
     store.set("floatingGlass", false);
   }
@@ -1798,7 +1796,7 @@ function toggleModernLook() {
 function toggleFloatingGlass() {
   const current = store.get("floatingGlass");
   const newValue = !current;
-  
+
   if (newValue) {
     store.set("modernLook", false);
   }
@@ -1812,7 +1810,7 @@ function toggleFloatingGlass() {
 function applyFloatingGlass() {
   if (!mainWindow) return;
   const enabled = store.get("floatingGlass");
-  mainWindow.webContents.removeInsertedCSS("floating-glass").catch(() => {});
+  mainWindow.webContents.removeInsertedCSS("floating-glass").catch(() => { });
 
   if (enabled) {
     // Proposal 1: Glassmorphism premium UI
@@ -1896,8 +1894,8 @@ function applyFloatingGlass() {
     `;
     mainWindow.webContents
       .insertCSS(glassCSS, { cssKey: "floating-glass" } as any)
-      .catch(() => {});
-      
+      .catch(() => { });
+
     // Force default theme to avoid clashing
     applyThemeCSS("default");
   } else {
@@ -1909,7 +1907,7 @@ function applyFloatingGlass() {
 // Function to open the Settings UI
 function openSettingsUI() {
   if (!mainWindow) return;
-  
+
   // Send the full config so the Settings UI knows what's enabled
   const fullConfig = {
     version: app.getVersion(),
@@ -1957,7 +1955,7 @@ ipcMain.on("update-setting", (event, { key, value }) => {
   }
 
   store.set(key, value);
-  
+
   // Handle specific side effects
   switch (key) {
     case "blockReadReceipts":
@@ -2018,7 +2016,7 @@ ipcMain.on("update-setting", (event, { key, value }) => {
       refreshGlobalShortcuts();
       break;
   }
-  
+
   updateMenu();
 });
 
@@ -2137,7 +2135,7 @@ function applyCustomCSS() {
 function clearCustomCSS() {
   store.set("customCSS", "");
   if (mainWindow) {
-    mainWindow.webContents.removeInsertedCSS("custom-css").catch(() => {});
+    mainWindow.webContents.removeInsertedCSS("custom-css").catch(() => { });
   }
   updateMenu();
 }
@@ -2161,7 +2159,7 @@ async function exportCookies() {
     const allCookies = [...cookies, ...facebookCookies];
 
     fs.writeFileSync(filePath, JSON.stringify(allCookies, null, 2));
-  dialog.showMessageBox(mainWindow, {
+    dialog.showMessageBox(mainWindow, {
       type: "info",
       title: "Export Complete",
       message: `Exported ${allCookies.length} cookies`,
@@ -3091,7 +3089,6 @@ function createWindow() {
         label: "Copy Link",
         click: () => {
           clipboard.writeText(linkURL);
-    if (linkURL && !linkURL.match(/^(javascript|data|vbscript|file):/i)) {
         },
       });
     }
@@ -3142,13 +3139,13 @@ function createWindow() {
             if (decoded && /[\x20-\x7E]/.test(decoded)) {
               decodedText = decoded;
             }
-          } catch (_) {}
+          } catch (_) { }
         }
         const searchable = (isText ? payload : decodedText).toLowerCase();
         const hasTyping = searchable.includes("typing");
         const hasPresence = searchable.includes("presence");
         const hasActive = searchable.includes("active");
-        const hasRead = searchable.includes("read");
+        const hasRead = searchable.includes("read")
         const shouldLog =
           debugWebSocketFramesAll || hasTyping || hasPresence || hasActive || hasRead;
 
@@ -3244,7 +3241,7 @@ function createWindow() {
       if (mainWindow && mainWindow.webContents && mainWindow.webContents.debugger.isAttached()) {
         mainWindow.webContents.debugger.detach();
       }
-    } catch (_) {}
+    } catch (_) { }
   });
 
   mainWindow.on("minimize", () => {
@@ -3334,7 +3331,7 @@ function registerGlobalShortcuts() {
   if (shortcuts.createPipWindow) globalShortcut.register(shortcuts.createPipWindow, createPipWindow);
   if (shortcuts.focusSearch) globalShortcut.register(shortcuts.focusSearch, focusSearch);
   if (shortcuts.scheduleSendNow) globalShortcut.register(shortcuts.scheduleSendNow, scheduleSendNow);
-  
+
   if (shortcuts.bossKey) globalShortcut.register(shortcuts.bossKey, toggleChameleonMode);
 
   globalShortcut.register("CmdOrCtrl+Up", () => navigateConversation("up"));
