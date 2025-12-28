@@ -3091,7 +3091,7 @@ function createWindow() {
         label: "Copy Link",
         click: () => {
           clipboard.writeText(linkURL);
-          mainWindow.webContents.send("show-toast", { message: "Link copied", tone: "info" });
+    if (linkURL && !linkURL.match(/^(javascript|data|vbscript|file):/i)) {
         },
       });
     }
