@@ -20,7 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { appState, store } from "./state.js";
 import { openInputDialog, openSelectionDialog } from "./dialogs.js";
-import { applyAndroidBubbles, applyThemeCSS, THEME_OPTIONS } from "./themes.js";
+import { applyAndroidBubbles, applyModernBubbles, applyThemeCSS, THEME_OPTIONS } from "./themes.js";
 import { checkForUpdates } from "./updates.js";
 import { hideChatHead, initChatHeadIPC, showChatHeadIfAvailable } from "./chat-head.js";
 
@@ -51,6 +51,20 @@ if (process.platform === 'win32') {
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// shared window open handler for external links
+function createWindowOpenHandler() {
+  return ({ url }) => {
+    if (url.startsWith("https://www.messenger.com") ||
+        url.startsWith("https://messenger.com") ||
+        url.startsWith("https://www.facebook.com") ||
+        url.startsWith("https://facebook.com")) {
+      return { action: "allow" as const };
+    }
+    shell.openExternal(url);
+    return { action: "deny" as const };
+  };
+}
 
 let mainWindow: BrowserWindow | null = null;
 let pipWindow: BrowserWindow | null = null;
@@ -587,6 +601,13 @@ function toggleAndroidBubbles() {
   const current = store.get("androidBubbles");
   store.set("androidBubbles", !current);
   applyAndroidBubbles();
+  updateMenu();
+}
+
+function toggleModernBubbles() {
+  const current = store.get("modernBubbles");
+  store.set("modernBubbles", !current);
+  applyModernBubbles();
   updateMenu();
 }
 
@@ -1942,7 +1963,7 @@ function openSettingsUI() {
 
 
 ipcMain.on("update-setting", (event, { key, value }) => {
-  const experimentalKeys = new Set(["androidBubbles", "expTypingOverlay"]);
+  const experimentalKeys = new Set(["androidBubbles", "modernBubbles", "expTypingOverlay"]);
   if (key === "experimentalEnabled") return;
   if (experimentalKeys.has(key) && !store.get("experimentalEnabled")) {
     if (mainWindow) {
@@ -2002,6 +2023,9 @@ ipcMain.on("update-setting", (event, { key, value }) => {
       break;
     case "androidBubbles":
       applyAndroidBubbles();
+      break;
+    case "modernBubbles":
+      applyModernBubbles();
       break;
     case "alwaysOnTop":
       mainWindow.setAlwaysOnTop(value);
@@ -2246,6 +2270,9 @@ function createPipWindow() {
   pipWindow.loadURL("https://www.messenger.com");
   pipWindow.webContents.setUserAgent(USER_AGENT);
 
+  // open external links in default browser
+  pipWindow.webContents.setWindowOpenHandler(createWindowOpenHandler());
+
   pipWindow.webContents.on("before-input-event", (event, input) => {
     if (input.key === "Escape") {
       pipWindow.close();
@@ -2303,6 +2330,7 @@ function updateMenu() {
   const windowOpacity = store.get("windowOpacity");
   const customCSS = store.get("customCSS");
   const androidBubbles = store.get("androidBubbles");
+  const modernBubbles = store.get("modernBubbles");
   const experimentalEnabled = store.get("experimentalEnabled");
   const quietHoursEnabled = store.get("quietHoursEnabled");
   const quietHoursStart = store.get("quietHoursStart");
@@ -2573,6 +2601,13 @@ function updateMenu() {
               type: "checkbox",
               checked: androidBubbles,
               click: toggleAndroidBubbles,
+              visible: experimentalEnabled,
+            },
+            {
+              label: "[EXP] Modern Bubbles",
+              type: "checkbox",
+              checked: modernBubbles,
+              click: toggleModernBubbles,
               visible: experimentalEnabled,
             },
             {
@@ -3168,6 +3203,9 @@ function createWindow() {
     }
   }
 
+  // open external links in default browser
+  mainWindow.webContents.setWindowOpenHandler(createWindowOpenHandler());
+
   mainWindow.loadURL("https://www.messenger.com");
 
   mainWindow.on("page-title-updated", (event, title) => {
@@ -3195,6 +3233,7 @@ function createWindow() {
 
     applyCustomCSS();
     applyAndroidBubbles();
+    applyModernBubbles();
     pushRendererConfig();
 
     // send initial feature states to preload

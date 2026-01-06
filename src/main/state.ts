@@ -32,6 +32,7 @@ export const store = new Store({
     modernLook: false,
     floatingGlass: false,
     androidBubbles: false,
+    modernBubbles: false,
     experimentalEnabled: false,
     unsendDetection: false,
     autoReplyEnabled: false,

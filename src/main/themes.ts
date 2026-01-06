@@ -26,9 +26,11 @@ export const THEME_OPTIONS = [
 ];
 
 export const ANDROID_BUBBLES_THEME_ID = "androidbubbles";
+export const MODERN_BUBBLES_THEME_ID = "modernbubbles";
 const THEME_IDS = new Set([
   ...THEME_OPTIONS.map((option) => option.id),
   ANDROID_BUBBLES_THEME_ID,
+  MODERN_BUBBLES_THEME_ID,
 ]);
 
 export function getThemeCSS(theme: string) {
@@ -67,6 +69,21 @@ export function applyAndroidBubbles() {
   if (css) {
     appState.mainWindow.webContents
       .insertCSS(css, { cssKey: "android-bubbles" } as any)
+      .catch(() => {});
+  }
+}
+
+export function applyModernBubbles() {
+  if (!appState.mainWindow) return;
+  const enabled = store.get("modernBubbles");
+  appState.mainWindow.webContents
+    .removeInsertedCSS("modern-bubbles")
+    .catch(() => {});
+  if (!enabled) return;
+  const css = getThemeCSS(MODERN_BUBBLES_THEME_ID);
+  if (css) {
+    appState.mainWindow.webContents
+      .insertCSS(css, { cssKey: "modern-bubbles" } as any)
       .catch(() => {});
   }
 }
