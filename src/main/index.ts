@@ -55,12 +55,28 @@ const USER_AGENT =
 // shared window open handler for external links
 function createWindowOpenHandler() {
   return ({ url }) => {
-    if (url.startsWith("https://www.messenger.com") ||
-        url.startsWith("https://messenger.com") ||
-        url.startsWith("https://www.facebook.com") ||
-        url.startsWith("https://facebook.com")) {
-      return { action: "allow" as const };
+    // Allow about:blank (often used for popups)
+    if (url === "about:blank") return { action: "allow" as const };
+
+    try {
+      const u = new URL(url);
+      const protocol = u.protocol;
+      const hostname = u.hostname.toLowerCase();
+
+      // Allow all subdomains of messenger.com and facebook.com
+      if (
+        (protocol === "http:" || protocol === "https:") &&
+        (hostname === "messenger.com" ||
+         hostname.endsWith(".messenger.com") ||
+         hostname === "facebook.com" ||
+         hostname.endsWith(".facebook.com"))
+      ) {
+        return { action: "allow" as const };
+      }
+    } catch (_) {
+      // invalid URL, fall through to deny
     }
+
     shell.openExternal(url);
     return { action: "deny" as const };
   };
@@ -3030,8 +3046,7 @@ function createWindow() {
         console.error("[Unleashed] Display media request failed:", error);
         callback({ video: null });
       }
-    },
-    { useSystemPicker: process.platform === "darwin" }
+    }
   );
 
   installLocalProbeBlocker();
