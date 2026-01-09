@@ -55,15 +55,21 @@ const USER_AGENT =
 // shared window open handler for external links
 function createWindowOpenHandler() {
   return ({ url }) => {
-    // Allow about:blank (often used for popups)
+    // allow about:blank (often used for popups)
     if (url === "about:blank") return { action: "allow" as const };
 
     try {
       const u = new URL(url);
       const protocol = u.protocol;
+
+      // allow blob: and data: URLs (used for video playback, media, etc)
+      if (protocol === "blob:" || protocol === "data:") {
+        return { action: "allow" as const };
+      }
+
       const hostname = u.hostname.toLowerCase();
 
-      // Allow all subdomains of messenger.com and facebook.com
+      // allow all subdomains of messenger.com and facebook.com
       if (
         (protocol === "http:" || protocol === "https:") &&
         (hostname === "messenger.com" ||
@@ -86,7 +92,7 @@ let mainWindow: BrowserWindow | null = null;
 let pipWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let unreadCount = 0;
-let typingBlockerHandler: ((details: any, callback: any) => void) | null = null;
+const typingBlockerHandler: ((details: any, callback: any) => void) | null = null;
 let quietHoursTimer: NodeJS.Timeout | null = null;
 let shortcutsRegistered = false;
 let shortcutsDirty = true;
@@ -650,7 +656,7 @@ function parseTimeInput(value) {
   if (!match) return null;
 
   let hours = parseInt(match[1], 10);
-  let minutes = parseInt(match[2] || "0", 10);
+  const minutes = parseInt(match[2] || "0", 10);
   const meridiem = match[3];
 
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;

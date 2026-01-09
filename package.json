@@ -15,7 +15,20 @@
     "build:mac": "bun run build:ts && bun x electron-builder --mac",
     "build:win": "bun run build:ts && bun x electron-builder --win",
     "bump": "node scripts/bump.cjs",
-    "postinstall": "node scripts/fix-ajv.cjs"
+    "postinstall": "node scripts/fix-ajv.cjs",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check": "bun run lint && bun run typecheck && bun run test",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   },
   "dependencies": {
     "agent-base": "^7.1.4",
@@ -24,10 +37,17 @@
     "https-proxy-agent": "^7.0.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@vitest/coverage-v8": "^4.0.16",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "esbuild": "^0.27.2",
-    "typescript": "^5.6.3"
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.52.0",
+    "vitest": "^4.0.16"
   },
   "build": {
     "appId": "com.messenger.unleashed",
