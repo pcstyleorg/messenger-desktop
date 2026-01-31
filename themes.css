@@ -367,46 +367,4 @@ div[role="textbox"] {
   background: #434756;
 }
 
-/* androidbubbles */
-div[role="none"] > div > div[dir="auto"] {
-  border-radius: 18px 18px 18px 6px !important;
-  padding: 8px 12px !important;
-}
-div[role="none"][data-testid="message-container-outgoing"] > div > div[dir="auto"] {
-  border-radius: 18px 18px 6px 18px !important;
-}
 
-/* modernbubbles */
-div[role="none"] > div > div[dir="auto"] {
-  border-radius: 20px !important;
-  padding: 10px 14px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
-  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-  font-size: 0.95em !important;
-  line-height: 1.4 !important;
-  max-width: 65% !important;
-}
-
-div[role="none"] > div > div[dir="auto"]:hover {
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16) !important;
-}
-
-div[role="none"][data-testid="message-container-outgoing"] > div > div[dir="auto"] {
-  background: linear-gradient(135deg, #0066cc 0%, #0056b3 100%) !important;
-  color: #fff !important;
-  box-shadow: 0 2px 12px rgba(0, 86, 179, 0.3) !important;
-}
-
-div[role="none"][data-testid="message-container-outgoing"] > div > div[dir="auto"]:hover {
-  box-shadow: 0 4px 16px rgba(0, 86, 179, 0.4) !important;
-}
-
-div[role="none"][data-testid="message-container-incoming"] > div > div[dir="auto"] {
-  background-color: #f0f0f0 !important;
-  color: #1c1e21 !important;
-}
-
-div[aria-label="Messages"] [role="none"] {
-  margin-bottom: 4px !important;
-}

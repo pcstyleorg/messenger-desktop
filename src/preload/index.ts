@@ -22,7 +22,6 @@ let config = {
 }
 
 let blockReadReceipts = false
-let blockActiveStatus = false
 let blockTypingIndicator = false
 let visibilityPatched = false
 const debugWebSocketBlocker =
@@ -60,16 +59,6 @@ function shouldBlockTypingPayload(text) {
   return text.toLowerCase().includes('is_typing')
 }
 
-function shouldBlockActiveStatusPayload(text) {
-  if (!text) return false
-  if (text.includes('USER_ACTIVITY_UPDATE_SUBSCRIBE')) return true
-  if (text.includes('USER_ACTIVITY_UPDATE')) return true
-  const lower = text.toLowerCase()
-  if (lower.includes('presence') && lower.includes('active')) return true
-  if (lower.includes('active_status')) return true
-  return false
-}
-
 function installWebSocketInterceptor() {
   if (typeof window === 'undefined' || !window.WebSocket) return
   const OriginalWebSocket = window.WebSocket
@@ -79,12 +68,11 @@ function installWebSocketInterceptor() {
     const originalSend = ws.send
 
     ws.send = function (data) {
-      if (blockTypingIndicator || blockActiveStatus || debugWebSocketTypingTrace) {
+      if (blockTypingIndicator || debugWebSocketTypingTrace) {
         const decoded = decodeWebSocketPayload(data)
         if (decoded) {
           const isTypingPayload = shouldBlockTypingPayload(decoded)
           const blockTyping = blockTypingIndicator && isTypingPayload
-          const blockActive = blockActiveStatus && shouldBlockActiveStatusPayload(decoded)
           if (debugWebSocketTypingTrace && isTypingPayload) {
             let preview = ''
             if (debugWebSocketBlockerDecode) {
@@ -92,9 +80,9 @@ function installWebSocketInterceptor() {
             }
             console.log(`[Unleashed] [WS-TYPING] ${url} blocked=${blockTypingIndicator}${preview}`)
           }
-          if (blockTyping || blockActive) {
+          if (blockTyping) {
             if (debugWebSocketBlocker) {
-              const reason = blockTyping ? 'typing' : 'active-status'
+              const reason = 'typing'
               let preview = ''
               if (debugWebSocketBlockerDecode && decoded) {
                 preview = ` payload=${decoded.slice(0, 220)}`
@@ -168,16 +156,11 @@ ipcRenderer.on('set-block-read-receipts', (_, enabled) => {
   updateVisibilityState()
 })
 
-ipcRenderer.on('set-block-active-status', (_, enabled) => {
-  blockActiveStatus = enabled
-  updateVisibilityState()
-})
-
 // Unified visibility logic
 function updateVisibilityState() {
-  // We force hidden if Active Status is blocked OR Read Receipts are blocked
+  // We force hidden if Read Receipts are blocked
   // (Read receipts usually require visibility to trigger, so this is a safety net)
-  if (blockActiveStatus || blockReadReceipts) {
+  if (blockReadReceipts) {
     applyVisibilityOverride()
   } else {
     restoreVisibilityOverride()
@@ -847,344 +830,6 @@ window.addEventListener('DOMContentLoaded', () => {
   setupKeywordAlerts()
   setupBackgroundDetection()
   setupSettingsEntry()
-  setupInvisibleInk() // Steganography
-  setInterval(scrapeActiveChat, 2000)
-})
-
-function scrapeActiveChat() {
-  const activeLink =
-    document.querySelector('div[role="navigation"] a[aria-current="page"]') ||
-    document.querySelector('div[aria-label="Chats"] a[aria-current="page"]')
-
-  const avatarSrc =
-    getAvatarSrc(activeLink) ||
-    getAvatarSrc(document.querySelector('div[role="banner"]')) ||
-    getAvatarSrc(document.querySelector('header'))
-
-  if (!avatarSrc) return
-
-  ipcRenderer.send('update-active-chat', { src: avatarSrc })
-}
-
-function getAvatarSrc(container) {
-  if (!container) return null
-  const img =
-    container.querySelector('img') ||
-    container.querySelector('svg image') ||
-    container.querySelector('svg mask image') ||
-    container.querySelector('image')
-  if (!img) return null
-  return (
-    img.src ||
-    img.getAttribute('href') ||
-    img.getAttribute('xlink:href') ||
-    null
-  )
-}
-
-// --- Invisible Ink (Steganography) ---
-const INVISIBLE_ZERO = '\u200B'
-const INVISIBLE_ONE = '\u200C'
-const INVISIBLE_SPLIT = '\u200D'
-
-function asciiToBinary(str) {
-  return str.split('').map(char => {
-    return char.charCodeAt(0).toString(2).padStart(8, '0')
-  }).join('')
-}
-
-function binaryToAscii(bin) {
-  return bin.match(/.{1,8}/g).map(byte => {
-    return String.fromCharCode(parseInt(byte, 2))
-  }).join('')
-}
-
-function encodeInvisible(text) {
-  const binary = asciiToBinary(text)
-  return INVISIBLE_SPLIT + binary.split('').map(b => b === '0' ? INVISIBLE_ZERO : INVISIBLE_ONE).join('') + INVISIBLE_SPLIT
-}
-
-function decodeInvisible(text) {
-  // Extract invisible invisible sequence
-  const pattern = new RegExp(`${INVISIBLE_SPLIT}([${INVISIBLE_ZERO}${INVISIBLE_ONE}]+)${INVISIBLE_SPLIT}`)
-  const match = text.match(pattern)
-  if (!match) return null
-  
-  const binary = match[1].split('').map(c => c === INVISIBLE_ZERO ? '0' : '1').join('')
-  return binaryToAscii(binary)
-}
-
-function setupInvisibleInk() {
-  let isInvisibleMode = false
-  const innocentPhrases = [
-    "Sounds good to me.", "I'll check it out.", "Okay, let me know.", 
-    "Just finishing up here.", "That's interesting.", "Can we talk later?",
-    "Hey, what's up?", "Got it.", "No worries.", "See you soon.",
-    "Thanks for the update.", "I agree.", "On my way."
-  ]
-
-  // UI Injection
-  const injectToggle = () => {
-    const actions = document.querySelector('div[aria-label="Message actions"]') || 
-                    document.querySelector('div[aria-label="Conversation actions"]')
-    
-    // Look for the input area container to attach
-    const inputArea = document.querySelector('div[role="textbox"]') || 
-                      document.querySelector('div[contenteditable="true"]') ||
-                      document.querySelector('div[aria-label="Message"]')
-                      
-    if (!inputArea) return
-
-    if (document.getElementById('invisible-ink-toggle')) return
-
-    const btn = document.createElement('div')
-    btn.id = 'invisible-ink-toggle'
-    btn.innerHTML = ICONS.lock
-    btn.title = "Invisible Ink Mode"
-    btn.style.cssText = `
-      position: absolute; bottom: 100%; right: 20px;
-      width: 40px; height: 40px; background: rgba(0,0,0,0.5);
-      border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; z-index: 100; margin-bottom: 5px;
-      font-size: 16px; transition: all 0.2s;
-      color: white;
-    `
-    btn.onclick = () => {
-      isInvisibleMode = !isInvisibleMode
-      const input = document.querySelector('div[role="textbox"]')
-      
-      if (isInvisibleMode) {
-        btn.style.background = '#0084ff'
-        btn.innerHTML = ICONS.ghost
-        if (input) {
-            input.setAttribute('data-placeholder-original', input.getAttribute('aria-label') || '')
-            // visual feedback
-            input.style.border = '2px solid #0084ff'
-        }
-      } else {
-        btn.style.background = 'rgba(0,0,0,0.5)'
-        btn.innerHTML = ICONS.lock
-        if (input) input.style.border = 'none'
-      }
-    }
-    
-    // Attach near input
-    const container = inputArea.closest('div[role="none"]') || inputArea.parentElement
-    if (container) {
-        container.style.position = 'relative'
-        container.appendChild(btn)
-    }
-  }
-
-  // Poll for UI
-  setInterval(injectToggle, 2000)
-
-  // Intercept Sending
-  document.addEventListener('keydown', (e) => {
-    if (!isInvisibleMode) return
-    if (e.key === 'Enter' && !e.shiftKey) {
-        const input = document.querySelector('div[role="textbox"]')
-        if (!input) return
-        
-        const secret = input.innerText.trim()
-        if (!secret) return
-        
-        e.preventDefault()
-        e.stopPropagation()
-        
-        // Encode
-        const innocent = innocentPhrases[Math.floor(Math.random() * innocentPhrases.length)]
-        const payload = innocent + ' ' + encodeInvisible(secret)
-        
-        // Replace and Send
-        
-        // Using strict execCommand for Messenger compatibility
-        document.execCommand('selectAll', false, null)
-        document.execCommand('insertText', false, payload)
-        
-        // Let React state catch up then dispatch enter
-        setTimeout(() => {
-            const enter = new KeyboardEvent('keydown', {
-                bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13
-            })
-            input.dispatchEvent(enter)
-        }, 50)
-        
-        // Reset (optional, React usually clears it)
-        isInvisibleMode = false
-        const btn = document.getElementById('invisible-ink-toggle')
-        if (btn) {
-            btn.style.background = 'rgba(0,0,0,0.5)'
-            btn.innerHTML = ICONS.lock
-            input.style.border = 'none'
-        }
-    }
-  }, true)
-
-  // Decoder Observer
-  const decodeObserver = new MutationObserver((mutations) => {
-    document.querySelectorAll('div[dir="auto"]').forEach(el => {
-        if (el.dataset.scanned) return
-        const text = el.innerText
-        if (text && text.includes(INVISIBLE_SPLIT)) {
-            const secret = decodeInvisible(text)
-            if (secret) {
-                el.innerText = '' // clear
-                
-                const lock = document.createElement('span')
-                lock.innerHTML = ICONS.lock + ' '
-                lock.style.verticalAlign = 'middle'
-                lock.style.marginRight = '4px'
-                
-                const secretSpan = document.createElement('span')
-                secretSpan.textContent = secret
-                secretSpan.style.color = '#ff4400'
-                secretSpan.style.fontWeight = 'bold'
-                secretSpan.style.backgroundColor = 'rgba(255,255,0,0.1)'
-                secretSpan.style.padding = '2px 4px'
-                secretSpan.style.borderRadius = '4px'
-
-                const originalSpan = document.createElement('span')
-                originalSpan.textContent = ` (${text.replace(INVISIBLE_SPLIT, '').substring(0, 10)}...)`
-                originalSpan.style.fontSize = '10px'
-                originalSpan.style.opacity = '0.5'
-                
-                el.appendChild(lock)
-                el.appendChild(secretSpan)
-                el.appendChild(originalSpan)
-                el.dataset.scanned = 'true'
-            }
-        }
-    })
-  })
-  
-  decodeObserver.observe(document.body, { childList: true, subtree: true, characterData: true })
-}
-
-// --- Unsend Detection ---
-// tracks messages to detect when someone unsends a message
-
-const messageCache = new Map()
-let unsendDetectionEnabled = false
-let unsendObserver: MutationObserver | null = null
-let unsendScanInterval: ReturnType<typeof setInterval> | null = null
-
-function generateMessageId(parent: Element, el: Element): string {
-  // prefer stable messenger-specific IDs
-  const msgId = parent.getAttribute('data-message-id') || parent.getAttribute('data-testid')
-  if (msgId) return msgId
-
-  // fallback: timestamp + position-based ID (more stable than text content)
-  const timeEl = parent.querySelector('time')
-  const timestamp = timeEl?.getAttribute('datetime') || ''
-  const rowIndex = parent.getAttribute('data-row-index') || ''
-  if (timestamp) return `${timestamp}-${rowIndex}`
-
-  // last resort: text-based hash
-  const text = (el as HTMLElement).innerText || ''
-  return `text-${text.length}-${text.slice(0, 50).replace(/\s/g, '')}`
-}
-
-function setupUnsendDetection() {
-  // prevent duplicate observers
-  if (unsendObserver) return
-
-  const scanMessages = () => {
-    const messageElements = document.querySelectorAll('div[dir="auto"]')
-    messageElements.forEach((el) => {
-      const parent = el.closest('div[role="row"]') || el.closest('div[data-testid]')
-      if (!parent) return
-
-      const id = generateMessageId(parent, el)
-      if (!id) return
-
-      const text = (el as HTMLElement).innerText?.trim()
-      if (text && text.length > 0 && !messageCache.has(id)) {
-        messageCache.set(id, {
-          text,
-          timestamp: Date.now()
-        })
-      }
-    })
-
-    // cleanup old messages (older than 1 hour)
-    const oneHourAgo = Date.now() - 3600000
-    const maxSize = 500
-    for (const [key, value] of messageCache.entries()) {
-      if (value.timestamp < oneHourAgo) {
-        messageCache.delete(key)
-      }
-    }
-    // limit cache size by removing oldest entries
-    if (messageCache.size > maxSize) {
-      const entries = Array.from(messageCache.entries())
-      entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
-      const toRemove = messageCache.size - maxSize
-      entries.slice(0, toRemove).forEach(([k]) => messageCache.delete(k))
-    }
-  }
-
-  unsendObserver = new MutationObserver((mutations) => {
-    if (!unsendDetectionEnabled) return
-
-    mutations.forEach((mutation) => {
-      mutation.removedNodes.forEach((node) => {
-        if (!(node instanceof HTMLElement)) return
-
-        const isMessageContainer = node.querySelector?.('div[dir="auto"]') ||
-          node.matches?.('div[role="row"]') ||
-          node.matches?.('div[data-testid*="message"]')
-
-        if (isMessageContainer) {
-          // use the already-found element if it's a div[dir="auto"], otherwise query
-          const textEl = (node.matches?.('div[dir="auto"]') ? node : node.querySelector?.('div[dir="auto"]')) as HTMLElement | null
-          const text = textEl?.innerText?.trim()
-
-          if (text && text.length > 2) {
-            console.log('[Unleashed] Message unsent detected:', text.slice(0, 100))
-
-            if (window.electronAPI?.showNotification) {
-              window.electronAPI.showNotification('Message Unsent', {
-                body: `"${text.slice(0, 80)}${text.length > 80 ? '...' : ''}"`,
-                silent: false
-              })
-            }
-
-            showToast(`📩 Unsent: "${text.slice(0, 40)}${text.length > 40 ? '...' : ''}"`, {
-              tone: 'warning',
-              duration: 5000
-            })
-          }
-        }
-      })
-    })
-
-    scanMessages()
-  })
-
-  const messageArea = document.querySelector('div[aria-label="Messages"]') || document.body
-  unsendObserver.observe(messageArea, { childList: true, subtree: true })
-
-  scanMessages()
-  unsendScanInterval = setInterval(scanMessages, 5000)
-}
-
-ipcRenderer.on('set-unsend-detection', (_, enabled) => {
-  unsendDetectionEnabled = enabled
-  if (enabled && document.body) {
-    setupUnsendDetection()
-  } else {
-    // cleanup when disabled
-    if (unsendObserver) {
-      unsendObserver.disconnect()
-      unsendObserver = null
-    }
-    if (unsendScanInterval) {
-      clearInterval(unsendScanInterval)
-      unsendScanInterval = null
-    }
-    messageCache.clear()
-  }
 })
 
 // --- Auto-Reply (Away Mode) ---
@@ -1311,29 +956,6 @@ ipcRenderer.on('set-auto-reply', (_, enabled) => {
 ipcRenderer.on('set-auto-reply-message', (_, message) => {
   if (typeof message === 'string') {
     autoReplyMessage = message
-  }
-})
-
-// --- Link Preview Blocking ---
-let linkPreviewBlocking = false
-
-ipcRenderer.on('set-link-preview-blocking', (_, enabled) => {
-  linkPreviewBlocking = enabled
-  if (enabled) {
-    const style = document.createElement('style')
-    style.id = 'unleashed-link-preview-block'
-    style.textContent = `
-      div[role="link"],
-      a[role="link"] > div[style*="border-radius"],
-      div[data-testid*="link-preview"],
-      div[data-testid*="url-preview"] {
-        display: none !important;
-      }
-    `
-    document.head.appendChild(style)
-  } else {
-    const existing = document.getElementById('unleashed-link-preview-block')
-    if (existing) existing.remove()
   }
 })
 

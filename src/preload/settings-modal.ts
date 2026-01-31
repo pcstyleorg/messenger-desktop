@@ -162,7 +162,7 @@ function showSettingsModal(config: any) {
   mainTitle.style.cssText = `margin: 0; font-size: 20px; font-weight: 700; color: ${textColor};`
 
   subTitle = document.createElement("div")
-  subTitle.textContent = `v${config.version || "2.1.3"} — Settings`
+  subTitle.textContent = `v${config.version || "2.2.0"} — Settings`
   subTitle.style.cssText = `font-size: 12px; color: ${subTextColor}; font-weight: 500; margin-top: 2px;`
 
   titleGroup.append(mainTitle, subTitle)
@@ -311,14 +311,6 @@ function showSettingsModal(config: any) {
   )
   privacySection.append(
     createToggleRow(
-      "Block Active Status",
-      "Appear offline but still see others.",
-      "blockActiveStatus",
-      config.blockActiveStatus
-    )
-  )
-  privacySection.append(
-    createToggleRow(
       "Block Typing Indicator",
       'Hide "typing..." while you compose.',
       "blockTypingIndicator",
@@ -346,6 +338,14 @@ function showSettingsModal(config: any) {
       overlay.remove()
       ipcRenderer.send("edit-keywords")
     })
+  )
+  privacySection.append(
+    createToggleRow(
+      "[EXP] Open External Links in Browser",
+      "Open non-Messenger links in your default browser instead of the app.",
+      "externalLinksInBrowser",
+      config.externalLinksInBrowser
+    )
   )
 
   // Appearance Section
@@ -608,14 +608,7 @@ function showSettingsModal(config: any) {
         config.expTypingOverlay
       )
     )
-    experimentalSection.append(
-      createToggleRow(
-        "Android Bubbles",
-        "Rounded Android-style chat bubbles.",
-        "androidBubbles",
-        config.androidBubbles
-      )
-    )
+
   }
 
   const experimentalPanel = makePanel("experimental", "Experimental", experimentalSection)

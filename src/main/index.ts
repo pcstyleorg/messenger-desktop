@@ -20,9 +20,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { appState, store } from "./state.js";
 import { openInputDialog, openSelectionDialog } from "./dialogs.js";
-import { applyAndroidBubbles, applyModernBubbles, applyThemeCSS, THEME_OPTIONS } from "./themes.js";
+import { applyThemeCSS, THEME_OPTIONS } from "./themes.js";
 import { checkForUpdates } from "./updates.js";
-import { hideChatHead, initChatHeadIPC, showChatHeadIfAvailable } from "./chat-head.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,8 +42,6 @@ if (!gotTheLock) {
   });
 }
 
-initChatHeadIPC();
-
 if (process.platform === 'win32') {
   app.setAppUserModelId(app.name);
 }
@@ -55,36 +52,48 @@ const USER_AGENT =
 // shared window open handler for external links
 function createWindowOpenHandler() {
   return ({ url }) => {
-    // allow about:blank (often used for popups)
+    // ALWAYS allow about:blank (required for popups, OAuth flows, etc)
     if (url === "about:blank") return { action: "allow" as const };
 
     try {
       const u = new URL(url);
       const protocol = u.protocol;
 
-      // allow blob: and data: URLs (used for video playback, media, etc)
+      // ALWAYS allow blob: and data: URLs (required for video playback, media, etc)
       if (protocol === "blob:" || protocol === "data:") {
         return { action: "allow" as const };
       }
 
       const hostname = u.hostname.toLowerCase();
 
-      // allow all subdomains of messenger.com and facebook.com
+      // ALWAYS allow messenger.com and facebook.com domains (core app functionality)
       if (
         (protocol === "http:" || protocol === "https:") &&
         (hostname === "messenger.com" ||
          hostname.endsWith(".messenger.com") ||
          hostname === "facebook.com" ||
-         hostname.endsWith(".facebook.com"))
+         hostname.endsWith(".facebook.com") ||
+         hostname === "fb.com" ||
+         hostname.endsWith(".fb.com") ||
+         hostname === "fbcdn.net" ||
+         hostname.endsWith(".fbcdn.net"))
       ) {
         return { action: "allow" as const };
       }
+
+      // Check if user wants external links in browser (experimental feature)
+      const openInBrowser = store.get("externalLinksInBrowser");
+      if (openInBrowser) {
+        shell.openExternal(url);
+        return { action: "deny" as const };
+      }
     } catch (_) {
-      // invalid URL, fall through to deny
+      // invalid URL, fall through to allow (safer default)
+      return { action: "allow" as const };
     }
 
-    shell.openExternal(url);
-    return { action: "deny" as const };
+    // Default: allow in app
+    return { action: "allow" as const };
   };
 }
 
@@ -446,18 +455,16 @@ function buildWebSocketProxyInstallScript() {
 
         ws.send = function (data) {
           const blockTypingIndicator = !!window.__unleashedBlockTypingIndicator;
-          const blockActiveStatus = !!window.__unleashedBlockActiveStatus;
           const blockReadReceipts = !!window.__unleashedBlockReadReceipts;
           const debugWebSocketBlocker = !!window.__unleashedDebugWsBlocker;
           const debugWebSocketBlockerDecode = !!window.__unleashedDebugWsBlockerDecode;
           const debugWebSocketTypingTrace = !!window.__unleashedDebugWsTypingTrace;
 
-          if (blockTypingIndicator || blockActiveStatus || blockReadReceipts || debugWebSocketTypingTrace) {
+          if (blockTypingIndicator || blockReadReceipts || debugWebSocketTypingTrace) {
             const decoded = decodePayload(data);
             if (decoded) {
               const isTypingPayload = shouldBlockTypingPayload(decoded);
               const blockTyping = blockTypingIndicator && isTypingPayload;
-              const blockActive = blockActiveStatus && shouldBlockActiveStatusPayload(decoded);
               const blockRead = blockReadReceipts && shouldBlockReadReceiptPayload(decoded);
 
               if (debugWebSocketTypingTrace && isTypingPayload) {
@@ -468,9 +475,9 @@ function buildWebSocketProxyInstallScript() {
                 console.log('[Unleashed] [WS-TYPING] ' + url + ' blocked=' + blockTypingIndicator + preview);
               }
 
-              if (blockTyping || blockActive || blockRead) {
+              if (blockTyping || blockRead) {
                 if (debugWebSocketBlocker) {
-                  const reason = blockTyping ? 'typing' : blockActive ? 'active-status' : 'read-receipt';
+                  const reason = blockTyping ? 'typing' : 'read-receipt';
                   let preview = '';
                   if (debugWebSocketBlockerDecode) {
                     preview = ' payload=' + decoded.slice(0, 220);
@@ -501,7 +508,6 @@ function buildWebSocketProxyInstallScript() {
 function syncWebSocketProxyFlags() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const blockTypingIndicator = !!store.get("blockTypingIndicator");
-  const blockActiveStatus = !!store.get("blockActiveStatus");
   const blockReadReceipts = !!store.get("blockReadReceipts");
   const debugWebSocketBlocker =
     process.env.DEBUG_REQUEST_BLOCKER_WS === "1" ||
@@ -513,7 +519,6 @@ function syncWebSocketProxyFlags() {
   const script = `
     (() => {
       window.__unleashedBlockTypingIndicator = ${blockTypingIndicator ? "true" : "false"};
-      window.__unleashedBlockActiveStatus = ${blockActiveStatus ? "true" : "false"};
       window.__unleashedBlockReadReceipts = ${blockReadReceipts ? "true" : "false"};
       window.__unleashedDebugWsBlocker = ${debugWebSocketBlocker ? "true" : "false"};
       window.__unleashedDebugWsBlockerDecode = ${debugWebSocketBlockerDecode ? "true" : "false"};
@@ -617,20 +622,6 @@ function applyTheme(theme) {
 
   // Instant apply instead of full reload
   applyThemeCSS(theme);
-}
-
-function toggleAndroidBubbles() {
-  const current = store.get("androidBubbles");
-  store.set("androidBubbles", !current);
-  applyAndroidBubbles();
-  updateMenu();
-}
-
-function toggleModernBubbles() {
-  const current = store.get("modernBubbles");
-  store.set("modernBubbles", !current);
-  applyModernBubbles();
-  updateMenu();
 }
 
 function toggleAlwaysOnTop() {
@@ -1230,24 +1221,6 @@ function toggleBlockTypingIndicator() {
   updateMenu();
 }
 
-function toggleBlockActiveStatus() {
-  const current = store.get("blockActiveStatus");
-  const newValue = !current;
-  store.set("blockActiveStatus", newValue);
-
-  if (!mainWindow) return;
-
-  // notify preload to update active status blocking
-  mainWindow.webContents.send("set-block-active-status", newValue);
-  syncWebSocketProxyFlags();
-
-  if (!newValue) {
-    mainWindow.webContents.reload();
-  }
-
-  updateMenu();
-}
-
 function toggleExpTypingOverlay() {
   const current = store.get("expTypingOverlay");
   const newValue = !current;
@@ -1256,23 +1229,6 @@ function toggleExpTypingOverlay() {
   if (!mainWindow) return;
   mainWindow.webContents.send("set-exp-typing-overlay", newValue);
   updateMenu();
-}
-
-function toggleUnsendDetection() {
-  const current = store.get("unsendDetection");
-  const newValue = !current;
-  store.set("unsendDetection", newValue);
-
-  if (!mainWindow) return;
-  mainWindow.webContents.send("set-unsend-detection", newValue);
-  updateMenu();
-
-  if (newValue) {
-    mainWindow.webContents.send("show-toast", {
-      message: "Unsend detection enabled. You'll be notified when messages are removed.",
-      tone: "success",
-    });
-  }
 }
 
 function toggleAutoReply() {
@@ -1438,23 +1394,6 @@ function applySystemTheme() {
   }
 }
 
-function toggleLinkPreviewBlocking() {
-  const current = store.get("linkPreviewBlocking");
-  const newValue = !current;
-  store.set("linkPreviewBlocking", newValue);
-
-  if (!mainWindow) return;
-  mainWindow.webContents.send("set-link-preview-blocking", newValue);
-  updateMenu();
-
-  if (newValue) {
-    mainWindow.webContents.send("show-toast", {
-      message: "Link previews will be blocked for privacy.",
-      tone: "success",
-    });
-  }
-}
-
 function toggleScreenshotProtection() {
   const current = store.get("screenshotProtection");
   const newValue = !current;
@@ -1473,6 +1412,23 @@ function toggleScreenshotProtection() {
       : "Screenshot protection disabled.",
     tone: newValue ? "success" : "info",
   });
+}
+
+function toggleExternalLinksInBrowser() {
+  const current = store.get("externalLinksInBrowser");
+  const newValue = !current;
+  store.set("externalLinksInBrowser", newValue);
+
+  updateMenu();
+
+  if (mainWindow) {
+    mainWindow.webContents.send("show-toast", {
+      message: newValue
+        ? "[EXP] External links will open in your default browser. Messenger links still open in app."
+        : "[EXP] All links will open in the app.",
+      tone: newValue ? "success" : "info",
+    });
+  }
 }
 
 function showConversationStats() {
@@ -1956,7 +1912,6 @@ function openSettingsUI() {
     version: app.getVersion(),
     shortcuts: store.get("shortcuts"),
     blockReadReceipts: store.get("blockReadReceipts"),
-    blockActiveStatus: store.get("blockActiveStatus"),
     blockTypingIndicator: store.get("blockTypingIndicator"),
     expTypingOverlay: store.get("expTypingOverlay"),
     clipboardSanitize: store.get("clipboardSanitize"),
@@ -1964,7 +1919,6 @@ function openSettingsUI() {
     doNotDisturb: store.get("doNotDisturb"),
     modernLook: store.get("modernLook"),
     floatingGlass: store.get("floatingGlass"),
-    androidBubbles: store.get("androidBubbles"),
     experimentalEnabled: store.get("experimentalEnabled"),
     theme: store.get("theme"),
     windowOpacity: store.get("windowOpacity"),
@@ -1978,6 +1932,7 @@ function openSettingsUI() {
     quietHoursEnd: store.get("quietHoursEnd"),
     quietHoursLabel: getQuietHoursRangeLabel(),
     quickReplies: store.get("quickReplies"),
+    externalLinksInBrowser: store.get("externalLinksInBrowser"),
   }
 
   mainWindow.webContents.send("open-settings-modal", fullConfig);
@@ -1985,7 +1940,7 @@ function openSettingsUI() {
 
 
 ipcMain.on("update-setting", (event, { key, value }) => {
-  const experimentalKeys = new Set(["androidBubbles", "modernBubbles", "expTypingOverlay"]);
+  const experimentalKeys = new Set(["expTypingOverlay", "externalLinksInBrowser"]);
   if (key === "experimentalEnabled") return;
   if (experimentalKeys.has(key) && !store.get("experimentalEnabled")) {
     if (mainWindow) {
@@ -2005,10 +1960,6 @@ ipcMain.on("update-setting", (event, { key, value }) => {
       store.set("blockReadReceipts", value);
       updateRequestBlocker();
       mainWindow.webContents.send("set-block-read-receipts", value);
-      break;
-    case "blockActiveStatus":
-      mainWindow.webContents.send("set-block-active-status", value);
-      syncWebSocketProxyFlags();
       break;
     case "blockTypingIndicator":
       updateRequestBlocker();
@@ -2042,12 +1993,6 @@ ipcMain.on("update-setting", (event, { key, value }) => {
       if (value) store.set("modernLook", false);
       applyModernLook();
       applyFloatingGlass();
-      break;
-    case "androidBubbles":
-      applyAndroidBubbles();
-      break;
-    case "modernBubbles":
-      applyModernBubbles();
       break;
     case "alwaysOnTop":
       mainWindow.setAlwaysOnTop(value);
@@ -2351,8 +2296,6 @@ function updateMenu() {
   const expTypingOverlay = store.get("expTypingOverlay");
   const windowOpacity = store.get("windowOpacity");
   const customCSS = store.get("customCSS");
-  const androidBubbles = store.get("androidBubbles");
-  const modernBubbles = store.get("modernBubbles");
   const experimentalEnabled = store.get("experimentalEnabled");
   const quietHoursEnabled = store.get("quietHoursEnabled");
   const quietHoursStart = store.get("quietHoursStart");
@@ -2428,12 +2371,6 @@ function updateMenu() {
               click: toggleBlockTypingIndicator,
             },
             {
-              label: "[EXP] Block Active Status",
-              type: "checkbox",
-              checked: store.get("blockActiveStatus"),
-              click: toggleBlockActiveStatus,
-            },
-            {
               label: "[EXP] Typing Overlay (Better Typing Block)",
               type: "checkbox",
               checked: expTypingOverlay,
@@ -2456,22 +2393,16 @@ function updateMenu() {
             { label: "Edit Keywords...", click: editKeywordAlerts },
             { type: "separator" },
             {
-              label: "[EXP] Unsend Detection",
-              type: "checkbox",
-              checked: store.get("unsendDetection"),
-              click: toggleUnsendDetection,
-            },
-            {
-              label: "[EXP] Block Link Previews",
-              type: "checkbox",
-              checked: store.get("linkPreviewBlocking"),
-              click: toggleLinkPreviewBlocking,
-            },
-            {
               label: "[EXP] Screenshot Protection",
               type: "checkbox",
               checked: store.get("screenshotProtection"),
               click: toggleScreenshotProtection,
+            },
+            {
+              label: "[EXP] Open External Links in Browser",
+              type: "checkbox",
+              checked: store.get("externalLinksInBrowser"),
+              click: toggleExternalLinksInBrowser,
             },
           ],
         },
@@ -2617,20 +2548,6 @@ function updateMenu() {
               type: "checkbox",
               checked: store.get("floatingGlass"),
               click: toggleFloatingGlass,
-            },
-            {
-              label: "[EXP] Android Bubbles",
-              type: "checkbox",
-              checked: androidBubbles,
-              click: toggleAndroidBubbles,
-              visible: experimentalEnabled,
-            },
-            {
-              label: "[EXP] Modern Bubbles",
-              type: "checkbox",
-              checked: modernBubbles,
-              click: toggleModernBubbles,
-              visible: experimentalEnabled,
             },
             {
               label: "Focus Mode",
@@ -2885,7 +2802,6 @@ function ensureMainWindowVisible() {
       mainWindow.show();
     }
     mainWindow.focus();
-    hideChatHead();
     return;
   }
   if (!appState.isAppQuiting) {
@@ -3253,8 +3169,6 @@ function createWindow() {
     }
 
     applyCustomCSS();
-    applyAndroidBubbles();
-    applyModernBubbles();
     pushRendererConfig();
 
     // send initial feature states to preload
@@ -3269,14 +3183,6 @@ function createWindow() {
     mainWindow.webContents.send(
       "set-exp-typing-overlay",
       store.get("expTypingOverlay")
-    );
-    mainWindow.webContents.send(
-      "set-unsend-detection",
-      store.get("unsendDetection")
-    );
-    mainWindow.webContents.send(
-      "set-link-preview-blocking",
-      store.get("linkPreviewBlocking")
     );
 
     ensureWebSocketProxyInstalled();
@@ -3304,21 +3210,7 @@ function createWindow() {
     } catch (_) { }
   });
 
-  mainWindow.on("minimize", () => {
-    showChatHeadIfAvailable();
-  });
 
-  mainWindow.on("restore", () => {
-    hideChatHead();
-  });
-
-  mainWindow.on("show", () => {
-    hideChatHead();
-  });
-
-  mainWindow.on("hide", () => {
-    showChatHeadIfAvailable();
-  });
 
   mainWindow.on("resize", () => {
     const { width, height } = mainWindow.getBounds();
@@ -3329,7 +3221,6 @@ function createWindow() {
     if (!appState.isAppQuiting) {
       event.preventDefault();
       mainWindow.hide();
-      showChatHeadIfAvailable();
     }
     return false;
   });
